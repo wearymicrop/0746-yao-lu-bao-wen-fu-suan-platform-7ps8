@@ -14,3 +14,17 @@
 连续段在失温、缺证和配方版本变更时切断。签核放行需连续时长达标且缺证为零。
 JSON 支持 UTF-8 或 UTF-8 BOM。缺列和类型错误保留在隔离记录，空采样数组代表全窗缺证。
 凭证保存规范化 JSON 的摘要，可检查文件完整性。签核人为业务记录字段。
+
+## 复采闭锁（M8）
+
+| 对象 | 字段 | 规则 |
+|---|---|---|
+| 闭锁边界 `boundaries` | `zone` `start` `end` `recovery` `seconds` | 起点为失效校准窗（偏移超限 / 校准缺失 / 校准重叠）在计划窗内的最早起点；终点为失效窗结束后该热区首个合格读数时刻，无恢复点则到计划结束。同热区相接窗口合并，跨热区分账 |
+| 闭锁台账 `records` | `id` `status` `attempts` `seconds` | id 由来源 + 炉批 + 热区 + 边界起止摘要确定，全局唯一。`LOCKED` 待补证，复采通过翻 `RELEASED`；同批复测重试不新增记录、不重复计时，`seconds` 恒定 |
+| 复采报文 `POST /api/lockouts/{source}/resample` | `operator` `readings` `calibrations` | 读数须逐热区覆盖每道边界的 `[start, end)`；`calibrations` 可选，提交即整体替换该来源校准登记。边界内原读数由复采行替换并保留行号证据，边界外不得改写 |
+| 解除判定 | — | 原边界消失、校准失效记录消除、边界时段复采后不再缺证方可解除；失败时保留旧版结论，仅累加 `attempts` 与失败原因 |
+| 放行闸口 | — | 存在未解除边界时 `POST /api/runs` 返回 `LOCKOUT_PENDING`；全部解除后带 `use_lockout=true` 归档，凭证固化复采合并输入、解除后结果与闭锁 id 清单 |
+
+校准、热区对齐与保温计时使用同一道闭锁边界：M8 输出中的 `alignment`、`soak`、
+`gaps`、`reconcile` 均为覆盖后的待补证视图，边界时段统一记 `LOCKOUT_PENDING` 缺证，
+不改变 M1–M6 的原始复算结果。

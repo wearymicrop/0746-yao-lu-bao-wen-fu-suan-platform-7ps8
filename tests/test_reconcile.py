@@ -43,14 +43,13 @@ def test_duplicate_is_in_reading_balance(dirty_result):
     assert r["reading_difference"] == 1 and r["status"] == "MISMATCH"
 
 
-def test_no_publish_on_mismatched_balance(clean_result):
+def test_no_publish_on_mismatched_balance(clean, clean_result):
     clean_result["reconcile"]["status"] = "MISMATCH"
     with pytest.raises(BusinessError, match="尚未对平"):
-        approval(clean_result)
+        approval(clean_result, clean)
 
 
-def test_archive_business_decisions(clean_result, dirty_result):
-    assert (
-        approval(clean_result)["status"] == "RELEASED"
-        and approval(dirty_result)["status"] == "REVIEW"
-    )
+def test_archive_business_decisions(clean, clean_result, dirty, dirty_result):
+    assert approval(clean_result, clean)["status"] == "RELEASED"
+    with pytest.raises(BusinessError, match="复采闭锁"):
+        approval(dirty_result, dirty)

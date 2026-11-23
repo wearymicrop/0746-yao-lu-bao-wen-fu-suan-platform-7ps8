@@ -246,6 +246,80 @@ h2 {
 .unproven {
   --tone: var(--warn);
 }
+.locked {
+  --tone: #c9708a;
+}
+.lockout-panel {
+  grid-column: 1 / -1;
+}
+.lockout-body {
+  padding: 10px 12px;
+  display: grid;
+  gap: 10px;
+}
+.lockout-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-family: var(--mono);
+}
+.lockout-head span {
+  color: var(--warn);
+}
+.lockout-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+}
+.lock-card {
+  background: #2a2320;
+  border: 1px solid #6e4a3a;
+  border-left: 3px solid #c9708a;
+  padding: 8px 10px;
+  display: grid;
+  gap: 4px;
+}
+.lock-card.released {
+  background: #20302a;
+  border-color: #3c5f4a;
+  border-left-color: var(--accent);
+}
+.lock-card small {
+  color: var(--sub);
+}
+.lock-bands {
+  position: relative;
+  height: 14px;
+  background: #242f29;
+  border: 1px solid var(--line);
+}
+.lock-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    45deg,
+    #8a4a60,
+    #8a4a60 5px,
+    #d68aa4 5px,
+    #d68aa4 10px
+  );
+}
+.resample-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.resample-form input[type="file"] {
+  max-width: 220px;
+}
+.resample-feedback {
+  flex-basis: 100%;
+  color: var(--warn);
+  font-size: 12px;
+}
 #track-bars {
   display: flex;
   margin: 3px 12px 0;

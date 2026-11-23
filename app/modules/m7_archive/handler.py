@@ -12,11 +12,14 @@ router = APIRouter(prefix="/api/runs", tags=["归档与凭证"])
 class Submission(BaseModel):
     source: str = ""
     operator: str = ""
+    use_lockout: bool = False
 
 
 @router.post("")
 def create(request: Request, data: Submission):
-    return archive(request.app.state.ledger, data.source, data.operator)
+    return archive(
+        request.app.state.ledger, data.source, data.operator, data.use_lockout
+    )
 
 
 @router.get("/{run_id}")

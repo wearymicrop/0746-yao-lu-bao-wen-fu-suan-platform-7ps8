@@ -6,12 +6,12 @@ from app.main import create_app
 from app.manifest import digest
 
 
-SIGN = {"source": "dirty", "operator": "值班员"}
+SIGN = {"source": "clean", "operator": "值班员"}
 
 
-def test_manifest_tracks_input_and_result(client, dirty):
+def test_manifest_tracks_input_and_result(client, clean):
     record = client.post("/api/runs", json=SIGN).json()
-    assert record["manifest"]["input_sha256"] == digest(dirty)
+    assert record["manifest"]["input_sha256"] == digest(clean)
     assert record["manifest"]["result_sha256"] == digest(record["result"])
 
 
@@ -38,21 +38,29 @@ def test_export_attachment(client):
     assert export.json()["input"] == first["input"]
 
 
-def test_reopen_persistent_input_and_run(tmp_path, dirty):
+def test_dirty_batch_blocked_until_lockout_released(client):
+    response = client.post(
+        "/api/runs", json={"source": "dirty", "operator": "值班员"}
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "LOCKOUT_PENDING"
+
+
+def test_reopen_persistent_input_and_run(tmp_path, clean):
     file = tmp_path / "state.sqlite3"
     with TestClient(create_app(file)) as client:
-        source = client.post("/api/sources", json=dirty).json()["source"]
+        source = client.post("/api/sources", json=clean).json()["source"]
         record = client.post("/api/runs", json=dict(SIGN, source=source)).json()
     with TestClient(create_app(file)) as client:
         stored = client.get(f"/api/runs/{record['id']}").json()
         assert stored["id"] == record["id"]
         assert stored["approval"] == record["approval"]
         assert client.post(f"/api/runs/{record['id']}/rerun").json()["reused"] is True
-        assert client.post("/api/sources", json=dirty).json()["reused"] is True
+        assert client.post("/api/sources", json=clean).json()["reused"] is True
 
 
 def test_missing_signer_and_unknown_records(client):
-    response = client.post("/api/runs", json={"source": "dirty"})
+    response = client.post("/api/runs", json={"source": "clean"})
     assert (
         response.status_code == 422 and response.json()["code"] == "OPERATOR_REQUIRED"
     )

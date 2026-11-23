@@ -13,6 +13,7 @@
 | M5 断档复判 | 找到缺证原因及恢复点 | `GET /api/gaps/{source}` | `app/modules/m5_gaps/grouping.py` | `tests/test_gaps.py` |
 | M6 炉批勾稽 | 核对计划时长与读数行账 | `GET /api/reconcile/{source}` | `app/modules/m6_reconcile/service.py` | `tests/test_reconcile.py` |
 | M7 签核归档 | 按证据签核、重跑、导出 | `POST /api/runs` | `app/modules/m7_archive/signoff.py` `app/modules/m7_archive/service.py` | `tests/test_archive.py` `tests/test_bundle.py` |
+| M8 复采闭锁 | 划定漂移边界、复采解除与放行闸口 | `GET /api/lockouts/{source}` `POST /api/lockouts/{source}/resample` | `app/modules/m8_lockout/boundary.py` `app/modules/m8_lockout/resample.py` | `tests/test_lockout.py` `tests/test_lockout_api.py` |
 
 ## 陷阱登记
 
@@ -27,6 +28,8 @@
 | TRAP-19 | 同一时段缺证和失温同时出现 | 只看失温 | 缺证优先，留失温证据 | `app/modules/m4_soak/service.py` | `tests/test_soak.py::test_unknown_thermal_state_counts_before_cold` |
 | TRAP-23 | 配方边界相邻 | 两段合算连续 | 左闭右开且版本处切段 | `app/modules/m4_soak/service.py` | `tests/test_soak.py::test_version_break_beats_sum` |
 | TRAP-25 | 试签配方与在用版并发 | 任取一版 | 记录双来源并切入缺证 | `app/modules/m4_soak/service.py` | `tests/test_soak.py::test_recipe_overlap_cannot_choose_last` |
+| TRAP-26 | 南墙探头核验间隔内漂移 | 只隔离报错读数，相邻保温继续采信；或整段回退作废可补时长 | 按失效校准核验间隔划定闭锁边界（起点=失效窗起点，终点=恢复合格读数时刻），校准、热区对齐、保温计时共用；未复采通过前只作待补证，不进正式放行 | `app/modules/m8_lockout/boundary.py` `app/modules/m8_lockout/service.py` | `tests/test_lockout.py` |
+| TRAP-27 | 同批复测反复提交 | 每次新增闭锁记录并重新计时 | 台账按炉批+热区+边界起止唯一，重试命中同一 id；解除失败保留旧版结论，只累加尝试次数 | `app/modules/m8_lockout/ledger_service.py` | `tests/test_lockout_api.py::test_resample_release_flow_and_idempotent_retry` |
 
 ## 对账
 

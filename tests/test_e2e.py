@@ -5,6 +5,10 @@ def test_all_workbench_entrypoints(client):
         for source in ("clean", "dirty"):
             response = client.get(f"/api/{module}/{source}")
             assert response.status_code == 200 and response.json()
+    lockouts = client.get("/api/lockouts/dirty").json()
+    assert lockouts["boundary_count"] == 1 and lockouts["records"][0]["status"] == "LOCKED"
+    assert client.get("/api/lockouts/clean").json()["boundary_count"] == 0
+    assert "复采闭锁" in client.get("/").text
 
 
 def test_bad_input_has_no_source_record(client):

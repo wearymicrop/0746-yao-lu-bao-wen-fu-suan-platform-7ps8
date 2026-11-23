@@ -9,6 +9,7 @@ const causes = {
   RECIPE_GAP: "配方缺失",
   CALIBRATION_GAP: "校准缺失",
   CALIBRATION_OVERLAP: "校准重叠",
+  LOCKOUT_PENDING: "复采闭锁待补证",
 };
 const time = (value) =>
   new Date(value * 1000).toLocaleTimeString("zh-CN", {
@@ -21,6 +22,7 @@ let snapshot,
   source = "dirty",
   serial = 0,
   archived,
+  lockoutData,
   buttons = [];
 function make(tag, text, cls) {
   const node = document.createElement(tag);
@@ -50,17 +52,24 @@ async function load(key) {
     const result = await Promise.all(
       parts.map((part) => api(`/api/${part}/${encodeURIComponent(key)}`)),
     );
+    const lockout = await api(`/api/lockouts/${encodeURIComponent(key)}`);
     if (current !== serial) return;
     source = key;
     snapshot = Object.fromEntries(parts.map((part, i) => [part, result[i]]));
+    lockoutData = lockout;
     el("batch").textContent = snapshot.intake.plan.batch;
-    el("reading-status").textContent = snapshot.soak.goal_met
-      ? "保温达标"
-      : "待工艺复核";
+    el("reading-status").textContent = lockout.boundary_count
+      ? lockout.all_released
+        ? "复采闭锁已解除"
+        : "复采闭锁待补证"
+      : snapshot.soak.goal_met
+        ? "保温达标"
+        : "待工艺复核";
     el("run-actions").hidden = true;
     el("run-feedback").textContent = "";
     archived = undefined;
     render();
+    renderLockout();
     el("sign-form").querySelector("button").disabled = false;
   } catch (error) {
     if (current === serial) el("reading-status").textContent = error.message;
@@ -157,6 +166,115 @@ function render() {
   );
   evidence();
 }
+function renderLockout() {
+  if (!lockoutData) return;
+  const box = el("lockout");
+  box.replaceChildren();
+  const head = make("div", undefined, "lockout-head");
+  head.append(
+    make(
+      "strong",
+      lockoutData.boundary_count
+        ? `闭锁 ${lockoutData.boundary_count} 段 · 共 ${lockoutData.locked_s} 秒`
+        : "无复采闭锁",
+    ),
+    make(
+      "span",
+      lockoutData.all_released
+        ? "已解除 · 可按复采结论放行"
+        : lockoutData.boundary_count
+          ? "待补证 · 不得正式放行"
+          : "全部时段可信",
+    ),
+  );
+  box.append(head);
+  if (!lockoutData.boundary_count) {
+    box.append(make("p", "本炉批未发现探头漂移边界", "empty"));
+    return;
+  }
+  const list = make("div", undefined, "lockout-list");
+  for (const record of lockoutData.records) {
+    const card = make("div", undefined, `lock-card ${record.status.toLowerCase()}`);
+    card.append(
+      make("strong", `${record.zone} · ${time(record.start)}–${time(record.end)}`),
+      make("small", `影响炉批 ${record.batch} · 闭锁计时 ${record.seconds} 秒`),
+      make(
+        "small",
+        record.status === "RELEASED"
+          ? `已解除 · 复测 ${record.attempts} 次 · 操作人 ${record.operator || "—"}`
+          : `待补证 · 已复测 ${record.attempts} 次（重试不重复计时）`,
+      ),
+    );
+    if (record.failure_reasons?.length) {
+      card.append(make("small", `上次失败：${record.failure_reasons.join("、")}`));
+    }
+    list.append(card);
+  }
+  box.append(list);
+
+  const bands = make("div", undefined, "lock-bands");
+  const planStart = snapshot.intake.plan.start;
+  const planned = snapshot.reconcile.planned_s;
+  for (const boundary of lockoutData.boundaries) {
+    const band = make("div", undefined, "lock-band");
+    band.style.left = `${((boundary.start - planStart) / planned) * 100}%`;
+    band.style.width = `${(boundary.seconds / planned) * 100}%`;
+    band.title = `${boundary.zone} ${time(boundary.start)}–${time(boundary.end)} 待补证`;
+    bands.append(band);
+  }
+  box.append(bands);
+
+  if (!lockoutData.all_released) {
+    const form = make("form", undefined, "resample-form");
+    const operator = make("input");
+    operator.placeholder = "复采操作人";
+    operator.maxLength = 32;
+    operator.required = true;
+    const file = make("input");
+    file.type = "file";
+    file.accept = ".json,application/json";
+    const button = make("button", "提交复采");
+    button.type = "submit";
+    const feedback = make("div", undefined, "resample-feedback");
+    form.append(make("label", "复采报文 "), file, operator, button, feedback);
+    form.onsubmit = async (event) => {
+      event.preventDefault();
+      const chosen = file.files[0];
+      if (!chosen) {
+        feedback.textContent = "请选择复采 JSON";
+        return;
+      }
+      button.disabled = true;
+      try {
+        const payload = await chosen.text();
+        const parsed = JSON.parse(payload);
+        const body = {
+          source,
+          operator: operator.value,
+          readings: parsed.readings ?? [],
+        };
+        if (parsed.calibrations) body.calibrations = parsed.calibrations;
+        const verdict = await api(
+          `/api/lockouts/${encodeURIComponent(source)}/resample`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          },
+        );
+        feedback.textContent = verdict.passed
+          ? "复采通过，闭锁已解除"
+          : `解除失败，保留旧结论：${verdict.failures.join("、")}`;
+        await load(source);
+      } catch (error) {
+        feedback.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    };
+    box.append(form);
+  }
+}
 function evidence() {
   if (!snapshot) return;
   const { intake, calibration, alignment } = snapshot;
@@ -249,7 +367,11 @@ el("sign-form").onsubmit = async (event) => {
     const result = await api("/api/runs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ source, operator: el("operator").value }),
+      body: JSON.stringify({
+        source,
+        operator: el("operator").value,
+        use_lockout: Boolean(lockoutData?.all_released),
+      }),
     });
     if (source !== requested) return;
     archived = result.id;

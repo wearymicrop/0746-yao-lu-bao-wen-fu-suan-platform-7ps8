@@ -13,4 +13,5 @@ LABELS = {
     "NO_READING": "有效读数失采",
     "BELOW_TARGET": "热区低于配方温度",
     "PROVEN": "所需热区均达标",
+    "LOCKOUT_PENDING": "复采闭锁待补证",
 }
